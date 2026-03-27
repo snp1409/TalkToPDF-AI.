@@ -1,0 +1,14 @@
+# Python secrets
+backend/venv/
+backend/.env
+backend/__pycache__/
+backend/*.pdf
+
+# React secrets
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# System files
+.DS_Store
+Thumbs.db
