@@ -7,14 +7,11 @@ import {
 } from 'lucide-react';
 
 function App() {
-  // 1. Identity & Data
   const [userName, setUserName] = useState(localStorage.getItem('chatUser') || '');
   const [tempName, setTempName] = useState('');
   const [sessions, setSessions] = useState([]); 
   const [currentFilename, setCurrentFilename] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
-
-  // 2. UI Status
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [isProcessed, setIsProcessed] = useState(false);
@@ -29,6 +26,8 @@ function App() {
     "What is the primary objective or purpose of this file?"
   ];
 
+  const API_BASE_URL = "https://talktopdf-backend-moyx.onrender.com";
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, loading]);
@@ -39,8 +38,7 @@ function App() {
 
   const fetchUserSessions = async () => {
     try {
-      const res = await axios.get(`http://localhost:8000/sessions/${userName}`);
-      // Safety check: ensure it is always an array
+      const res = await axios.get(`${API_BASE_URL}/sessions/${userName}`);
       if (res.data && res.data.sessions) {
         setSessions(res.data.sessions);
       } else {
@@ -58,7 +56,7 @@ function App() {
     setCurrentFilename(fname);
     setIsProcessed(true);
     try {
-      const res = await axios.get(`http://localhost:8000/history/${userName}/${fname}`);
+      const res = await axios.get(`${API_BASE_URL}/history/${userName}/${fname}`);
       setChatHistory(res.data?.history || []);
     } catch (err) { 
       setChatHistory([]);
@@ -71,7 +69,7 @@ function App() {
     e.stopPropagation();
     if (!window.confirm(`Delete ${fname}?`)) return;
     try {
-      await axios.delete(`http://localhost:8000/delete/${userName}/${fname}`);
+      await axios.delete(`${API_BASE_URL}/delete/${userName}/${fname}`);
       setSessions(prev => prev.filter(f => f !== fname));
       if (currentFilename === fname) {
         setChatHistory([]);
@@ -102,7 +100,7 @@ function App() {
     formData.append('file', file);
     formData.append('username', userName);
     try {
-      await axios.post('http://localhost:8000/upload', formData);
+      await axios.post(`${API_BASE_URL}/upload`, formData);
       setCurrentFilename(file.name);
       setIsProcessed(true);
       fetchUserSessions();
@@ -123,7 +121,7 @@ function App() {
       formData.append('question', q);
       formData.append('username', userName);
       formData.append('filename', currentFilename || "None");
-      const res = await axios.post('http://localhost:8000/chat', formData);
+      const res = await axios.post(`${API_BASE_URL}/chat`, formData);
       setChatHistory(prev => [...prev, { role: 'bot', text: res.data.answer }]);
     } catch (err) {
       setChatHistory(prev => [...prev, { role: 'bot', text: "❌ Connection Lost." }]);
@@ -132,7 +130,6 @@ function App() {
     }
   };
 
-  // --- LOGIN VIEW ---
   if (!userName) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#0f172a] font-sans">
@@ -149,22 +146,17 @@ function App() {
     );
   }
 
-  // --- MAIN VIEW ---
   return (
     <div className="flex h-screen bg-[#F7F7F8] text-[#343541] overflow-hidden antialiased">
-      
-      {/* SIDEBAR */}
-      <aside className="w-[280px] bg-[#202123] h-full flex flex-col p-3 text-white">
+      <aside className="w-[280px] bg-[#202123] h-full flex flex-col p-3 text-white shadow-xl z-20">
         <div className="flex items-center justify-between mb-4 p-2">
            <span className="font-bold flex items-center gap-2 italic"><Bot size={20} className="text-blue-400"/> TalkToPDF</span>
            <button onClick={handleLogout}><LogOut size={16} className="text-gray-500 hover:text-red-400"/></button>
         </div>
-
         <button onClick={() => {setChatHistory([]); setIsProcessed(false); setCurrentFilename(''); setFile(null);}} 
           className="w-full border border-white/10 p-3 rounded-md hover:bg-white/5 text-sm flex items-center gap-2 mb-4">
           <Plus size={14}/> New Chat
         </button>
-
         <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
           <p className="text-[10px] text-gray-500 font-bold uppercase mb-3 ml-2">History</p>
           {(sessions || []).map((s, i) => (
@@ -179,7 +171,6 @@ function App() {
             </div>
           ))}
         </div>
-
         <div className="mt-4 p-4 bg-[#2d2f35] rounded-xl border border-white/5">
            <input type="file" id="f" hidden accept=".pdf" onChange={(e)=> {setFile(e.target.files[0]); setIsProcessed(false);}} />
            <label htmlFor="f" className="cursor-pointer text-[10px] text-gray-400 block text-center border border-dashed border-gray-600 p-4 rounded-lg mb-2 hover:border-blue-500">
@@ -193,8 +184,6 @@ function App() {
            {isProcessed && <p className="text-[10px] text-green-400 font-bold text-center mt-2 animate-pulse">● AI ACTIVE</p>}
         </div>
       </aside>
-
-      {/* MAIN CHAT */}
       <main className="flex-1 flex flex-col bg-white relative">
         <div className="flex-1 overflow-y-auto pb-48">
           {chatHistory.length === 0 ? (
@@ -220,8 +209,6 @@ function App() {
           {loading && <div className="py-10 text-center text-gray-400 text-xs animate-pulse">AI is thinking...</div>}
           <div ref={chatEndRef} />
         </div>
-
-        {/* INPUT & SUGGESTIONS */}
         <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-10 pb-8 px-6">
            <div className="max-w-3xl mx-auto">
              {isProcessed && chatHistory.length === 0 && (
@@ -235,7 +222,7 @@ function App() {
                 <input type="text" value={question} onChange={(e)=>setQuestion(e.target.value)} 
                   placeholder="Ask a question..." className="flex-1 bg-transparent p-3 text-sm outline-none" />
                 <button type="submit" disabled={!question.trim() || loading} 
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl shadow-md active:scale-95">
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl transition-all active:scale-95 shadow-md">
                   <Send size={20}/>
                 </button>
              </form>
