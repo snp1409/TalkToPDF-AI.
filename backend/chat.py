@@ -7,16 +7,13 @@ from langchain_core.prompts import PromptTemplate
 
 load_dotenv()
 
-# --- THE AUTHORITATIVE UNIVERSAL TEMPLATE ---
-template = """You are a highly accurate Document Analyst.
+# Optimized Template for Speed
+template = """You are a professional Document Assistant.
+Use the provided context to answer the user's question accurately.
 
-TASK: Analyze the provided document context to answer the user's question.
-
-1. GLOBAL COVERAGE: You have been provided with excerpts from different parts of the document. Use them to provide a complete and organized answer.
-2. ACCURACY: If the information is present, summarize it clearly. 
-3. HONESTY (The No-Guess Rule): If the information is absolutely NOT in the provided context, say: 
-"I have carefully scanned the document and I can confirm that this specific information is not mentioned in this file. Please try with some other prompt that is accurate."
-4. STRUCTURE: Use bold headings and bullet points.
+1. If the information is in the context, provide a clear, bulleted answer.
+2. If it's a greeting (hi, hello), greet them and mention you are ready to analyze the file.
+3. If the answer is not there, say: "I'm sorry, I couldn't find that specific information in this document."
 
 Context:
 {context}
@@ -26,8 +23,9 @@ Question: {question}
 Assistant Reply:"""
 
 def ask_question(query, username, filename="None"):
+    # 1. Handle Pre-Upload State
     if filename == "None" or not filename:
-        return f"Hello {username}! I am your AI. Please upload a document to begin."
+        return f"Hello {username}! I am ready. Please upload a PDF in the sidebar to begin analysis."
 
     client = MongoClient(os.getenv("MONGO_URI"))
     collection = client["pdf_bot_db"]["pdf_chunks"]
@@ -37,10 +35,11 @@ def ask_question(query, username, filename="None"):
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
     
+    # We use Flash because it is the fastest model available
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-flash-latest", 
+        model="models/gemini-1.5-flash", 
         google_api_key=os.getenv("GOOGLE_API_KEY"),
-        temperature=0 
+        temperature=0.1
     )
 
     vector_store = MongoDBAtlasVectorSearch(
@@ -49,47 +48,29 @@ def ask_question(query, username, filename="None"):
         index_name="vector_index"
     )
 
-    # --- CLOUD OPTIMIZED RETRIEVAL ---
-    # We detect if the user wants a broad overview
-    is_summary = any(w in query.lower() for w in ["summary", "overview", "all", "entire", "everything"])
-
-    if is_summary:
-        # A. Get diverse semantic matches (Reduced k for RAM safety)
-        semantic_docs = vector_store.similarity_search(query, k=8, pre_filter={"username": {"$eq": username}})
-        
-        # B. Get the very first 2 chunks (The Intro)
-        head_docs = list(collection.find({"username": username}).sort("_id", 1).limit(2))
-        
-        # C. Get the very last 2 chunks (The Hobbies/Conclusion)
-        tail_docs = list(collection.find({"username": username}).sort("_id", -1).limit(2))
-
-        # Combine all unique text into a single context string
-        all_text = []
-        # We combine head, semantic, and tail for full document coverage
-        for d in (head_docs + semantic_docs + tail_docs):
-            # Check if it's a LangChain Document or a raw MongoDB dictionary
-            txt = d.page_content if hasattr(d, 'page_content') else d.get("text", d.get("page_content", ""))
-            if txt and txt not in all_text: 
-                all_text.append(txt)
-        
-        context_text = "\n\n".join(all_text)
-    else:
-        # Standard search for specific questions (Reduced k to 5 for speed/RAM)
-        docs = vector_store.similarity_search(query, k=5, pre_filter={"username": {"$eq": username}})
-        context_text = "\n\n".join([d.page_content for d in docs])
-
-    # Build the final prompt
-    final_prompt = template.format(context=context_text, question=query)
-
+    # --- CLOUD OPTIMIZATION ---
+    # We use k=5. This ensures the prompt is small and the AI 
+    # responds very quickly to avoid 'Connection Lost' timeouts.
     try:
+        docs = vector_store.similarity_search(
+            query, 
+            k=5, 
+            pre_filter={"username": {"$eq": username}}
+        )
+        
+        if not docs:
+            return "I couldn't find any data for your account. Please try re-uploading the file."
+
+        context_text = "\n\n".join([doc.page_content for doc in docs])
+        final_prompt = template.format(context=context_text, question=query)
+
         response = llm.invoke(final_prompt)
-        return response.content
+        return response.content if response.content else "AI generated an empty response. Please try again."
+
     except Exception as e:
-        # Catch quota or system errors
         if "429" in str(e):
-            return "⚠️ API Quota reached. Please wait 60 seconds."
-        return f"⚠️ System Error: {str(e)}"
+            return "⚠️ API limit reached. Please wait 60 seconds."
+        return f"Logic Error: {str(e)}"
 
 if __name__ == "__main__":
-    q = input("Question: ")
-    print(ask_question(q, "test_user"))
+    print(ask_question("Hi", "test_user"))

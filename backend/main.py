@@ -18,6 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def health_check():
+    return {"status": "TalkToPDF Cloud Server is Active"}
+
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...), username: str = Form(...)):
     file_path = f"temp_{file.filename}"
@@ -25,7 +29,6 @@ async def upload_pdf(file: UploadFile = File(...), username: str = Form(...)):
         shutil.copyfileobj(file.file, buffer)
     try:
         chunks = process_pdf(file_path)
-        # Now passing filename to save_to_mongodb
         save_to_mongodb(chunks, username, file.filename)
         os.remove(file_path)
         return {"message": "Success", "filename": file.filename}
@@ -34,25 +37,27 @@ async def upload_pdf(file: UploadFile = File(...), username: str = Form(...)):
         return {"error": str(e)}
 
 @app.post("/chat")
-async def chat_with_pdf(question: str = Form(...), username: str = Form(...), filename: str = Form("None")):
+async def chat_with_pdf(
+    question: str = Form(...), 
+    username: str = Form(...), 
+    filename: str = Form("None")
+):
     try:
+        # 1. Call AI logic
         answer = ask_question(question, username, filename)
+        
+        # 2. Safety: Force answer to be a string
+        safe_answer = str(answer) if answer else "I encountered a minor issue processing that. Please try again."
+
+        # 3. Save to History only if file exists
         if filename != "None":
             save_chat_message(username, filename, "user", question)
-            save_chat_message(username, filename, "bot", answer)
-        return {"answer": answer}
+            save_chat_message(username, filename, "bot", safe_answer)
+            
+        return {"answer": safe_answer}
     except Exception as e:
-        return {"answer": f"⚠️ Error: {str(e)}"}
-
-# NEW: Delete Route
-@app.delete("/delete/{username}/{filename}")
-async def delete_file(username: str, filename: str):
-    try:
-        delete_document_vectors(username, filename)
-        delete_file_history(username, filename)
-        return {"message": "Deleted successfully"}
-    except Exception as e:
-        return {"error": str(e)}
+        # If the whole process fails, send the error to the chat bubble
+        return {"answer": f"⚠️ Connection Issue: The server is busy. Please wait a moment and try again."}
 
 @app.get("/history/{username}/{filename}")
 async def fetch_history(username: str, filename: str):
@@ -64,6 +69,6 @@ async def fetch_sessions(username: str):
 
 if __name__ == "__main__":
     import uvicorn
-    # Render provides a PORT environment variable automatically
+    # Important: Bind to 0.0.0.0 for cloud deployment
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
