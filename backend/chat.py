@@ -37,7 +37,7 @@ def ask_question(query, username, filename="None"):
     
     # We use Flash because it is the fastest model available
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-flash", 
+        model="models/gemini-flash-latest", 
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         temperature=0.1
     )
