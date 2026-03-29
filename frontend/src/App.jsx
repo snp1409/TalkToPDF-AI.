@@ -26,6 +26,7 @@ function App() {
     "What is the primary objective or purpose of this file?"
   ];
 
+  // --- CRITICAL: THE CLOUD URL ---
   const API_BASE_URL = "https://talktopdf-backend-moyx.onrender.com";
 
   useEffect(() => {
@@ -39,14 +40,8 @@ function App() {
   const fetchUserSessions = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/sessions/${userName}`);
-      if (res.data && res.data.sessions) {
-        setSessions(res.data.sessions);
-      } else {
-        setSessions([]);
-      }
-    } catch (err) { 
-      setSessions([]); 
-    }
+      setSessions(res.data?.sessions || []);
+    } catch (err) { setSessions([]); }
   };
 
   const loadHistory = async (fname) => {
@@ -58,17 +53,15 @@ function App() {
     try {
       const res = await axios.get(`${API_BASE_URL}/history/${userName}/${fname}`);
       setChatHistory(res.data?.history || []);
-    } catch (err) { 
-      setChatHistory([]);
-    } finally { 
-      setLoading(false); 
-    }
+    } catch (err) { setChatHistory([]); }
+    finally { setLoading(false); }
   };
 
   const handleDelete = async (e, fname) => {
     e.stopPropagation();
     if (!window.confirm(`Delete ${fname}?`)) return;
     try {
+      // FIXED: Added the full route path
       await axios.delete(`${API_BASE_URL}/delete/${userName}/${fname}`);
       setSessions(prev => prev.filter(f => f !== fname));
       if (currentFilename === fname) {
@@ -76,21 +69,7 @@ function App() {
         setCurrentFilename('');
         setIsProcessed(false);
       }
-    } catch (err) { alert("Delete failed."); }
-  };
-
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (tempName.trim()) {
-      localStorage.setItem('chatUser', tempName);
-      setUserName(tempName);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('chatUser');
-    setUserName('');
-    window.location.reload();
+    } catch (err) { alert("Delete failed. Check Render logs."); }
   };
 
   const handleUpload = async () => {
@@ -100,15 +79,13 @@ function App() {
     formData.append('file', file);
     formData.append('username', userName);
     try {
+      // FIXED: Added /upload
       await axios.post(`${API_BASE_URL}/upload`, formData);
       setCurrentFilename(file.name);
       setIsProcessed(true);
       fetchUserSessions();
-    } catch (err) { 
-      alert("Upload error. Check backend."); 
-    } finally { 
-      setUploading(false); 
-    }
+    } catch (err) { alert("Upload error."); }
+    finally { setUploading(false); }
   };
 
   const sendMessage = async (q) => {
@@ -121,13 +98,12 @@ function App() {
       formData.append('question', q);
       formData.append('username', userName);
       formData.append('filename', currentFilename || "None");
+      // FIXED: Added /chat
       const res = await axios.post(`${API_BASE_URL}/chat`, formData);
       setChatHistory(prev => [...prev, { role: 'bot', text: res.data.answer }]);
     } catch (err) {
       setChatHistory(prev => [...prev, { role: 'bot', text: "❌ Connection Lost." }]);
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
 
   if (!userName) {
@@ -136,9 +112,9 @@ function App() {
         <div className="bg-white p-12 rounded-[2rem] shadow-2xl w-full max-w-md text-center">
           <Bot size={48} className="text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold mb-8">TalkToPDF AI</h1>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={(e)=> {e.preventDefault(); if(tempName){localStorage.setItem('chatUser', tempName); setUserName(tempName);}}}>
             <input type="text" placeholder="Your Name" value={tempName} onChange={(e)=>setTempName(e.target.value)}
-              className="w-full border-2 rounded-xl p-4 outline-none focus:border-blue-500 font-medium" />
+              className="w-full border-2 rounded-xl p-4 mb-4 outline-none focus:border-blue-500" />
             <button className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg">Launch</button>
           </form>
         </div>
@@ -150,8 +126,8 @@ function App() {
     <div className="flex h-screen bg-[#F7F7F8] text-[#343541] overflow-hidden antialiased">
       <aside className="w-[280px] bg-[#202123] h-full flex flex-col p-3 text-white shadow-xl z-20">
         <div className="flex items-center justify-between mb-4 p-2">
-           <span className="font-bold flex items-center gap-2 italic"><Bot size={20} className="text-blue-400"/> TalkToPDF</span>
-           <button onClick={handleLogout}><LogOut size={16} className="text-gray-500 hover:text-red-400"/></button>
+           <span className="font-bold flex items-center gap-2 italic text-blue-400">TalkToPDF</span>
+           <button onClick={()=>{localStorage.removeItem('chatUser'); window.location.reload();}}><LogOut size={16} className="text-gray-500 hover:text-red-400"/></button>
         </div>
         <button onClick={() => {setChatHistory([]); setIsProcessed(false); setCurrentFilename(''); setFile(null);}} 
           className="w-full border border-white/10 p-3 rounded-md hover:bg-white/5 text-sm flex items-center gap-2 mb-4">
@@ -159,7 +135,7 @@ function App() {
         </button>
         <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
           <p className="text-[10px] text-gray-500 font-bold uppercase mb-3 ml-2">History</p>
-          {(sessions || []).map((s, i) => (
+          {sessions.map((s, i) => (
             <div key={i} className="group flex items-center gap-1 pr-2">
               <button onClick={() => loadHistory(s)} 
                 className={`flex-1 text-left p-2.5 rounded-md text-xs truncate flex items-center gap-2 ${currentFilename === s ? 'bg-[#343541] text-white border border-white/10' : 'text-gray-400 hover:bg-white/5'}`}>
@@ -173,17 +149,18 @@ function App() {
         </div>
         <div className="mt-4 p-4 bg-[#2d2f35] rounded-xl border border-white/5">
            <input type="file" id="f" hidden accept=".pdf" onChange={(e)=> {setFile(e.target.files[0]); setIsProcessed(false);}} />
-           <label htmlFor="f" className="cursor-pointer text-[10px] text-gray-400 block text-center border border-dashed border-gray-600 p-4 rounded-lg mb-2 hover:border-blue-500">
+           <label htmlFor="f" className="cursor-pointer text-[10px] text-gray-400 block text-center border border-dashed border-gray-600 p-4 rounded-lg mb-2">
              {file ? <span className="text-blue-300 font-bold">{file.name}</span> : "Select PDF"}
            </label>
            {file && !isProcessed && (
-             <button onClick={handleUpload} className="w-full bg-blue-600 py-1.5 rounded text-[10px] font-bold">
+             <button onClick={handleUpload} className="w-full bg-blue-600 py-1.5 rounded text-[10px] font-bold shadow-lg">
                {uploading ? "..." : "PROCESS"}
              </button>
            )}
            {isProcessed && <p className="text-[10px] text-green-400 font-bold text-center mt-2 animate-pulse">● AI ACTIVE</p>}
         </div>
       </aside>
+
       <main className="flex-1 flex flex-col bg-white relative">
         <div className="flex-1 overflow-y-auto pb-48">
           {chatHistory.length === 0 ? (
@@ -199,7 +176,7 @@ function App() {
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-[#10a37f] text-white'}`}>
                     {msg.role === 'user' ? <User size={18}/> : <Bot size={18}/>}
                   </div>
-                  <div className="markdown-content text-[16px] leading-relaxed text-[#343541] w-full pt-1">
+                  <div className="markdown-content text-[16px] leading-relaxed text-gray-800 w-full pt-1">
                     <ReactMarkdown>{msg.text}</ReactMarkdown>
                   </div>
                 </div>
@@ -209,6 +186,7 @@ function App() {
           {loading && <div className="py-10 text-center text-gray-400 text-xs animate-pulse">AI is thinking...</div>}
           <div ref={chatEndRef} />
         </div>
+
         <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-10 pb-8 px-6">
            <div className="max-w-3xl mx-auto">
              {isProcessed && chatHistory.length === 0 && (
@@ -222,7 +200,7 @@ function App() {
                 <input type="text" value={question} onChange={(e)=>setQuestion(e.target.value)} 
                   placeholder="Ask a question..." className="flex-1 bg-transparent p-3 text-sm outline-none" />
                 <button type="submit" disabled={!question.trim() || loading} 
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl transition-all active:scale-95 shadow-md">
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl transition-all shadow-md active:scale-95">
                   <Send size={20}/>
                 </button>
              </form>
