@@ -20,7 +20,7 @@ app.add_middleware(
 
 @app.get("/")
 def health_check():
-    return {"status": "TalkToPDF Cloud Server is Active"}
+    return {"status": "TalkToPDF Server is Live"}
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...), username: str = Form(...)):
@@ -37,27 +37,25 @@ async def upload_pdf(file: UploadFile = File(...), username: str = Form(...)):
         return {"error": str(e)}
 
 @app.post("/chat")
-async def chat_with_pdf(
-    question: str = Form(...), 
-    username: str = Form(...), 
-    filename: str = Form("None")
-):
+async def chat_with_pdf(question: str = Form(...), username: str = Form(...), filename: str = Form("None")):
     try:
-        # 1. Call AI logic
         answer = ask_question(question, username, filename)
-        
-        # 2. Safety: Force answer to be a string
-        safe_answer = str(answer) if answer else "I encountered a minor issue processing that. Please try again."
-
-        # 3. Save to History only if file exists
         if filename != "None":
             save_chat_message(username, filename, "user", question)
-            save_chat_message(username, filename, "bot", safe_answer)
-            
-        return {"answer": safe_answer}
+            save_chat_message(username, filename, "bot", str(answer))
+        return {"answer": str(answer)}
     except Exception as e:
-        # If the whole process fails, send the error to the chat bubble
-        return {"answer": f"⚠️ Connection Issue: The server is busy. Please wait a moment and try again."}
+        return {"answer": f"⚠️ System Error: {str(e)}"}
+
+# --- CRITICAL: THE DELETE ROUTE ---
+@app.delete("/delete/{username}/{filename}")
+async def delete_file(username: str, filename: str):
+    try:
+        delete_document_vectors(username, filename)
+        delete_file_history(username, filename)
+        return {"message": "Deleted successfully"}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/history/{username}/{filename}")
 async def fetch_history(username: str, filename: str):
@@ -69,6 +67,5 @@ async def fetch_sessions(username: str):
 
 if __name__ == "__main__":
     import uvicorn
-    # Important: Bind to 0.0.0.0 for cloud deployment
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
