@@ -26,7 +26,7 @@ function App() {
     "What is the primary objective or purpose of this file?"
   ];
 
-  // --- CRITICAL: THE CLOUD URL ---
+  // --- PRODUCTION API URL ---
   const API_BASE_URL = "https://talktopdf-backend-moyx.onrender.com";
 
   useEffect(() => {
@@ -40,8 +40,14 @@ function App() {
   const fetchUserSessions = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/sessions/${userName}`);
-      setSessions(res.data?.sessions || []);
-    } catch (err) { setSessions([]); }
+      if (res.data && res.data.sessions) {
+        setSessions(res.data.sessions);
+      } else {
+        setSessions([]);
+      }
+    } catch (err) { 
+      setSessions([]); 
+    }
   };
 
   const loadHistory = async (fname) => {
@@ -53,15 +59,18 @@ function App() {
     try {
       const res = await axios.get(`${API_BASE_URL}/history/${userName}/${fname}`);
       setChatHistory(res.data?.history || []);
-    } catch (err) { setChatHistory([]); }
-    finally { setLoading(false); }
+    } catch (err) { 
+      setChatHistory([]);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleDelete = async (e, fname) => {
     e.stopPropagation();
     if (!window.confirm(`Delete ${fname}?`)) return;
     try {
-      // FIXED: Added the full route path
+      // FIXED: Added the specific /delete route path
       await axios.delete(`${API_BASE_URL}/delete/${userName}/${fname}`);
       setSessions(prev => prev.filter(f => f !== fname));
       if (currentFilename === fname) {
@@ -69,7 +78,7 @@ function App() {
         setCurrentFilename('');
         setIsProcessed(false);
       }
-    } catch (err) { alert("Delete failed. Check Render logs."); }
+    } catch (err) { alert("Delete failed. Check connection."); }
   };
 
   const handleUpload = async () => {
@@ -79,13 +88,16 @@ function App() {
     formData.append('file', file);
     formData.append('username', userName);
     try {
-      // FIXED: Added /upload
+      // FIXED: Added /upload endpoint
       await axios.post(`${API_BASE_URL}/upload`, formData);
       setCurrentFilename(file.name);
       setIsProcessed(true);
       fetchUserSessions();
-    } catch (err) { alert("Upload error."); }
-    finally { setUploading(false); }
+    } catch (err) { 
+      alert("Upload failed. Ensure backend is awake."); 
+    } finally { 
+      setUploading(false); 
+    }
   };
 
   const sendMessage = async (q) => {
@@ -98,12 +110,18 @@ function App() {
       formData.append('question', q);
       formData.append('username', userName);
       formData.append('filename', currentFilename || "None");
-      // FIXED: Added /chat
-      const res = await axios.post(`${API_BASE_URL}/chat`, formData);
+      
+      // --- CRITICAL FIX: TIMEOUT INCREASED TO 60 SECONDS ---
+      const res = await axios.post(`${API_BASE_URL}/chat`, formData, {
+        timeout: 60000 
+      });
+      
       setChatHistory(prev => [...prev, { role: 'bot', text: res.data.answer }]);
     } catch (err) {
-      setChatHistory(prev => [...prev, { role: 'bot', text: "❌ Connection Lost." }]);
-    } finally { setLoading(false); }
+      setChatHistory(prev => [...prev, { role: 'bot', text: "❌ The AI is taking too long to reply or the connection was dropped. Please try a shorter question." }]);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   if (!userName) {
@@ -112,9 +130,9 @@ function App() {
         <div className="bg-white p-12 rounded-[2rem] shadow-2xl w-full max-w-md text-center">
           <Bot size={48} className="text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold mb-8">TalkToPDF AI</h1>
-          <form onSubmit={(e)=> {e.preventDefault(); if(tempName){localStorage.setItem('chatUser', tempName); setUserName(tempName);}}}>
+          <form onSubmit={handleLogin} className="space-y-4">
             <input type="text" placeholder="Your Name" value={tempName} onChange={(e)=>setTempName(e.target.value)}
-              className="w-full border-2 rounded-xl p-4 mb-4 outline-none focus:border-blue-500" />
+              className="w-full border-2 rounded-xl p-4 mb-4 outline-none focus:border-blue-500 font-medium" />
             <button className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg">Launch</button>
           </form>
         </div>
@@ -149,11 +167,11 @@ function App() {
         </div>
         <div className="mt-4 p-4 bg-[#2d2f35] rounded-xl border border-white/5">
            <input type="file" id="f" hidden accept=".pdf" onChange={(e)=> {setFile(e.target.files[0]); setIsProcessed(false);}} />
-           <label htmlFor="f" className="cursor-pointer text-[10px] text-gray-400 block text-center border border-dashed border-gray-600 p-4 rounded-lg mb-2">
+           <label htmlFor="f" className="cursor-pointer text-[10px] text-gray-400 block text-center border border-dashed border-gray-600 p-4 rounded-lg mb-2 hover:border-blue-500 transition-all">
              {file ? <span className="text-blue-300 font-bold">{file.name}</span> : "Select PDF"}
            </label>
            {file && !isProcessed && (
-             <button onClick={handleUpload} className="w-full bg-blue-600 py-1.5 rounded text-[10px] font-bold shadow-lg">
+             <button onClick={handleUpload} disabled={uploading} className="w-full mt-2 bg-blue-600 py-1.5 rounded text-[10px] font-bold shadow-lg">
                {uploading ? "..." : "PROCESS"}
              </button>
            )}
@@ -166,27 +184,33 @@ function App() {
           {chatHistory.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6">
                <Sparkles className="text-blue-600 mb-6 opacity-40" size={64} />
-               <h1 className="text-3xl font-extrabold text-gray-800">Hello, {userName}</h1>
-               <p className="text-gray-600 mt-2 max-w-sm">Welcome back. Select a past conversation or upload a new document to begin.</p>
+               <h1 className="text-3xl font-extrabold text-gray-800 italic">TalkToPDF</h1>
+               <p className="text-gray-600 mt-2 max-w-sm font-medium">Ready to explore. Upload a PDF or select from history to begin.</p>
             </div>
           ) : (
             chatHistory.map((msg, i) => (
               <div key={i} className={`py-10 flex justify-center border-b border-gray-50 ${msg.role === 'bot' ? 'bg-[#F7F7F8]' : 'bg-white'}`}>
-                <div className="max-w-3xl w-full flex gap-6 px-6">
+                <div className="max-w-3xl w-full flex gap-6 px-6 lg:px-0">
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-[#10a37f] text-white'}`}>
                     {msg.role === 'user' ? <User size={18}/> : <Bot size={18}/>}
                   </div>
-                  <div className="markdown-content text-[16px] leading-relaxed text-gray-800 w-full pt-1">
+                  <div className="markdown-content text-[16px] leading-relaxed text-[#343541] w-full pt-1">
                     <ReactMarkdown>{msg.text}</ReactMarkdown>
                   </div>
                 </div>
               </div>
             ))
           )}
-          {loading && <div className="py-10 text-center text-gray-400 text-xs animate-pulse">AI is thinking...</div>}
+          {loading && (
+            <div className="w-full py-10 flex justify-center bg-[#F7F7F8]">
+               <div className="max-w-3xl w-full flex gap-6 px-6 items-center">
+                  <Loader2 className="animate-spin text-green-600" size={20} />
+                  <span className="text-sm text-gray-400 font-medium">Processing document context...</span>
+               </div>
+            </div>
+          )}
           <div ref={chatEndRef} />
         </div>
-
         <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-white via-white to-transparent pt-10 pb-8 px-6">
            <div className="max-w-3xl mx-auto">
              {isProcessed && chatHistory.length === 0 && (
@@ -198,14 +222,14 @@ function App() {
              )}
              <form onSubmit={(e) => {e.preventDefault(); sendMessage(question);}} className="relative flex items-center bg-white border-2 border-gray-100 rounded-2xl shadow-2xl p-1.5 focus-within:border-blue-500">
                 <input type="text" value={question} onChange={(e)=>setQuestion(e.target.value)} 
-                  placeholder="Ask a question..." className="flex-1 bg-transparent p-3 text-sm outline-none" />
+                  placeholder="Ask a question..." className="flex-1 bg-transparent px-4 py-3 text-sm outline-none" />
                 <button type="submit" disabled={!question.trim() || loading} 
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl transition-all shadow-md active:scale-95">
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 text-white p-2.5 rounded-xl transition-all active:scale-95 shadow-md">
                   <Send size={20}/>
                 </button>
              </form>
              <p className="text-[9px] text-gray-400 text-center mt-4 uppercase tracking-widest flex items-center justify-center gap-1">
-               <AlertCircle size={10}/> Data Context: {currentFilename || "Global Chat"}
+               <AlertCircle size={10}/> Private Session: {currentFilename || "Global Chat"}
              </p>
            </div>
         </div>

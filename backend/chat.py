@@ -7,16 +7,15 @@ from langchain_core.prompts import PromptTemplate
 
 load_dotenv()
 
-# --- THE UNIVERSAL MASTER TEMPLATE ---
-# Designed to be descriptive and long for any document type
-template = """You are an Advanced Document Intelligence System. 
+# THE ULTIMATE PROMPT: Forces accuracy and long responses
+template = """You are a Master Document Analyst. Your responses are known for being detailed, accurate, and perfectly organized.
 
-TASK: Analyze the provided excerpts from a document to answer the user's question with high detail and professional clarity.
+TASK: Use the provided context excerpts to answer the user's question. 
 
-1. COMPREHENSIVE RESPONSE: Provide long, structured, and detailed answers. Use multiple bullet points and bold text for key terms.
-2. UNIVERSAL SCOPE: Whether the document is a resume, a report, or a manual, extract all relevant sections mentioned in the context.
-3. NO HALLUCINATION: If the information is not in the provided excerpts, say: "I have scanned the document and this specific information is not mentioned in the current context."
-4. GREETING: If it's a greeting, reply politely as a universal document assistant.
+1. COMPREHENSIVENESS: Provide a long, deep answer. If it is a summary, cover every section from the context.
+2. ACCURACY: Do not guess. Look at the specific details like dates, names, and technical stacks.
+3. STRUCTURE: Use bold headings and bullet points for every response.
+4. GREETING: If it's a 'hi' or 'hello', greet them as the TalkToPDF AI and mention the file name.
 
 Context Excerpts:
 {context}
@@ -27,7 +26,7 @@ Detailed Assistant Reply:"""
 
 def ask_question(query, username, filename="None"):
     if filename == "None" or not filename:
-        return f"Hello {username}! I am your Universal Document AI. Please upload any PDF to begin."
+        return f"Hello {username}! I am TalkToPDF. Please upload a document to begin our analysis."
 
     client = MongoClient(os.getenv("MONGO_URI"))
     collection = client["pdf_bot_db"]["pdf_chunks"]
@@ -38,53 +37,47 @@ def ask_question(query, username, filename="None"):
     )
     
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-flash-latest", 
+        model="models/gemini-1.5-flash", 
         google_api_key=os.getenv("GOOGLE_API_KEY"),
-        temperature=0.2 # Small creativity for better flow, but still factual
+        temperature=0.1 # Low temperature for high accuracy
     )
 
-    vector_store = MongoDBAtlasVectorSearch(
-        collection=collection,
-        embedding=embeddings,
-        index_name="vector_index"
-    )
+    vector_store = MongoDBAtlasVectorSearch(collection=collection, embedding=embeddings, index_name="vector_index")
 
-    # --- THE UNIVERSAL SEARCH ENGINE ---
-    # We detect if the user wants a broad overview or specific detail
-    is_broad = any(w in query.lower() for w in ["summary", "overview", "all", "everything", "details"])
+    # --- PERMANENT ACCURACY FIX: BOUNDARY-PINNED RETRIEVAL ---
+    # 1. Get Semantic Matches (Top 6)
+    semantic_docs = vector_store.similarity_search(query, k=6, pre_filter={"username": {"$eq": username}})
     
-    # We use k=15 to give the AI enough data for LONG responses without crashing Render's RAM
-    top_k = 15 if is_broad else 8
+    # 2. Get the First 3 Chunks (Start of Doc)
+    head_docs = list(collection.find({"username": username}).sort("_id", 1).limit(3))
+    
+    # 3. Get the Last 3 Chunks (End of Doc)
+    tail_docs = list(collection.find({"username": username}).sort("_id", -1).limit(3))
+
+    # Combine all unique text chunks
+    all_chunks = []
+    seen_text = set()
+    
+    for doc in (head_docs + semantic_docs + tail_docs):
+        # Handle different data types (Mongo vs Langchain)
+        text = doc.page_content if hasattr(doc, 'page_content') else doc.get("text", doc.get("page_content", ""))
+        if text and text not in seen_text:
+            all_chunks.append(text)
+            seen_text.add(text)
+    
+    context_text = "\n\n".join(all_chunks)
+    final_prompt = template.format(context=context_text, question=query)
 
     try:
-        docs = vector_store.similarity_search(
-            query, 
-            k=top_k, 
-            pre_filter={"username": {"$eq": username}}
-        )
-        
-        context_text = "\n\n".join([doc.page_content for doc in docs])
-        final_prompt = template.format(context=context_text, question=query)
-
+        # We use invoke with a timeout hint
         response = llm.invoke(final_prompt)
         
-        # --- THE "CODE BREAKING" FIX (STRICT PARSING) ---
-        # This handles the messy JSON format from your screenshots
-        raw_content = response.content
-        
-        if isinstance(raw_content, list):
-            # Extract text from the list of dicts/objects
-            processed_text = ""
-            for item in raw_content:
-                if isinstance(item, dict) and 'text' in item:
-                    processed_text += item['text']
-                else:
-                    processed_text += str(item)
-            return processed_text.strip()
-        
-        return str(raw_content).strip()
+        # Strict parsing to handle the 'messy code' error
+        content = response.content
+        if isinstance(content, list):
+            return "".join([p.get('text', str(p)) if isinstance(p, dict) else str(p) for p in content])
+        return str(content)
 
     except Exception as e:
-        if "429" in str(e):
-            return "⚠️ API Quota reached. Please wait 60 seconds."
-        return f"Technical Error: {str(e)}"
+        if "429" in str(e): return "⚠️ API Quota reached. Please wait 60 seconds."
+        return f"AI Logic Error: {str(e)}"
