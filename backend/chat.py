@@ -36,8 +36,9 @@ def ask_question(query, username, filename="None"):
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
     
+    # --- FIX APPLIED HERE: Updated to 2.5-flash ---
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-flash", 
+        model="models/gemini-2.5-flash", 
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         temperature=0.1 # Low temperature for high accuracy
     )
@@ -55,7 +56,7 @@ def ask_question(query, username, filename="None"):
     tail_docs = list(collection.find({"username": username}).sort("_id", -1).limit(3))
 
     # Combine all unique text chunks
-    all_chunks = []
+    all_chunks =[]
     seen_text = set()
     
     for doc in (head_docs + semantic_docs + tail_docs):
