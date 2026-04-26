@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
+// FIXED: Added 'History' to the import list below!
 import { 
   Upload, Send, FileText, Bot, User, Loader2, Plus, 
-  Sparkles, CheckCircle2, LogOut, MessageSquare, Trash2, AlertCircle 
+  Sparkles, CheckCircle2, LogOut, MessageSquare, Trash2, AlertCircle, History 
 } from 'lucide-react';
 
 export default function App() {
@@ -12,7 +13,7 @@ export default function App() {
   const [tempName, setTempName] = useState('');
   const [sessions, setSessions] = useState([]); 
   const [currentFilename, setCurrentFilename] = useState('');
-  const [chatHistory, setChatHistory] = useState([]);
+  const[chatHistory, setChatHistory] = useState([]);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [isProcessed, setIsProcessed] = useState(false);
@@ -23,7 +24,7 @@ export default function App() {
   const API_BASE_URL = "https://talktopdf-backend-moyx.onrender.com";
 
   // --- 2. SUGGESTION LIST ---
-  const suggestions = [
+  const suggestions =[
     "Give me a detailed summary of this document.", 
     "Identify the key technical details or experiences mentioned.",
     "List all names, dates, and contact details you can find.",
@@ -34,14 +35,14 @@ export default function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('chatUser');
     if (savedUser) setUserName(savedUser);
-  }, []);
+  },[]);
 
   const fetchUserSessions = async (name) => {
     const activeUser = name || userName;
     if (!activeUser) return;
     try {
       const res = await axios.get(`${API_BASE_URL}/sessions/${activeUser}`);
-      setSessions(res.data?.sessions || []);
+      setSessions(res.data?.sessions ||[]);
     } catch (err) { 
       setSessions([]); 
     }
@@ -104,7 +105,7 @@ export default function App() {
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
-    const payload = new FormData(); // Renamed to avoid browser conflict
+    const payload = new FormData(); 
     payload.append('file', file);
     payload.append('username', userName);
     try {
@@ -128,15 +129,15 @@ export default function App() {
     setQuestion('');
 
     try {
-      const payload = new FormData(); // Renamed to avoid browser conflict
+      const payload = new FormData(); 
       payload.append('question', q);
       payload.append('username', userName);
       payload.append('filename', currentFilename || "None");
       
       const res = await axios.post(`${API_BASE_URL}/chat`, payload, { timeout: 60000 });
-      setChatHistory(prev => [...prev, { role: 'bot', text: res.data?.answer || "AI could not process that." }]);
+      setChatHistory(prev =>[...prev, { role: 'bot', text: res.data?.answer || "AI could not process that." }]);
     } catch (err) {
-      setChatHistory(prev => [...prev, { role: 'bot', text: "❌ Connection error." }]);
+      setChatHistory(prev =>[...prev, { role: 'bot', text: "❌ Connection error." }]);
     } finally { 
       setLoading(false); 
     }
