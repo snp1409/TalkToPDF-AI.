@@ -14,10 +14,10 @@ def process_pdf(file_path):
     print(f"Successfully loaded {len(pages)} pages.")
 
     # 2. Setup the Splitter (The "Chunking" logic)
-    # We use 1000 characters per chunk with a 100 character overlap
+    # INCREASED: 1000 chunk size to keep Project Headers and Bullet points together!
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,  # Smaller chunks = more detail
-        chunk_overlap=100, # Better connection between chunks
+        chunk_size=1000,   # Increased to prevent blender effect
+        chunk_overlap=200, # Increased so sentences don't get cut in half
         length_function=len
     )
 
