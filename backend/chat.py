@@ -36,9 +36,11 @@ def ask_question(query, username, filename="None"):
         google_api_key=os.getenv("GOOGLE_API_KEY")
     )
     
-    # --- FIX APPLIED HERE: Updated to 2.5-flash ---
+    # --- RECRUITER-PROOF FIX: Fetch model from Env Variable ---
+    current_model = os.getenv("GEMINI_MODEL_NAME", "models/gemini-2.5-flash")
+
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-2.5-flash", 
+        model=current_model, 
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         temperature=0.1 # Low temperature for high accuracy
     )
