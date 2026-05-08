@@ -21,7 +21,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  const API_BASE_URL = "https://talktopdf-backend-moyx.onrender.com";
+  const API_BASE_URL = "https://talktopdf-ai.onrender.com";
 
   // --- 2. SUGGESTION LIST ---
   const suggestions =[
